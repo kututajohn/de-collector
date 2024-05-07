@@ -1,0 +1,9 @@
+[package]
+name = "farm_work_chain"
+version = "0.0.1"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
+
+[addresses]
+farm_work_chain = "0x0"
