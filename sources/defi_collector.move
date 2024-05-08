@@ -194,6 +194,14 @@ module defi_collector::defi_collector {
     balance::join(&mut user.balance, coin_amount);
   }
 
+  public fun withdraw(
+    user: &mut Company,
+    amount: u64,
+    ctx: &mut TxContext
+  ) : Coin<SUI> {
+    let payment = coin::take(&mut user.balance, amount, ctx);
+    payment
+  }
   // check user balance
   public fun user_check_balance(
     user: &User
@@ -209,14 +217,14 @@ module defi_collector::defi_collector {
   }
 
   // withdraw company balance
-  public entry fun withdraw_company_balance(
+  public fun withdraw_company_balance(
     cap: &CompanyCap,
     company: &mut Company,
     amount: u64,
     ctx: &mut TxContext
-  ) {
+  ) : Coin<SUI> {
     assert!(cap.for == object::id(company), ENotCompany);
     let payment = coin::take(&mut company.balance, amount, ctx);
-    transfer::public_transfer(payment, company.company);
+    payment
   }
 }
