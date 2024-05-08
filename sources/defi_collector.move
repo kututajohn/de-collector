@@ -186,42 +186,36 @@ module defi_collector::defi_collector {
   }
 
   // fund user account
-  public entry fun fund_user_account(
+  public entry fun deposit(
     user: &mut User,
     amount: Coin<SUI>,
-    ctx: &mut TxContext
   ) {
-    assert!(tx_context::sender(ctx) == user.user, ENotUser);
     let coin_amount = coin::into_balance(amount);
     balance::join(&mut user.balance, coin_amount);
   }
 
   // check user balance
   public fun user_check_balance(
-    user: &User,
-    ctx:  &mut TxContext
-  ): &Balance<SUI>  {
-    assert!(tx_context::sender(ctx) == user.user, ENotUser);
-    &user.balance
+    user: &User
+  ): u64  {
+    balance::value(&user.balance)
   }
 
   // company check balance
   public fun company_check_balance(
-    company: &Company,
-    ctx:  &mut TxContext
-  ): &Balance<SUI>  {
-    assert!(tx_context::sender(ctx) == company.company, ENotCompany);
-    &company.balance
+    company: &Company
+  ): u64  {
+    balance::value(&company.balance)
   }
 
   // withdraw company balance
   public entry fun withdraw_company_balance(
+    cap: &CompanyCap,
     company: &mut Company,
     amount: u64,
     ctx: &mut TxContext
   ) {
-    assert!(tx_context::sender(ctx) == company.company, ENotCompany);
-    assert!(balance::value(&company.balance) >= amount, EInsuficcientBalance);
+    assert!(cap.for == object::id(company), ENotCompany);
     let payment = coin::take(&mut company.balance, amount, ctx);
     transfer::public_transfer(payment, company.company);
   }
