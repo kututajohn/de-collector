@@ -135,23 +135,7 @@ module defi_collector::defi_collector {
       assignedUsers: vector::empty<address>(),
     }
   }
-
-  // new collection request
-  public entry fun new_collection_request(
-    user: &User,
-    clock: &Clock,
-    ctx: &mut TxContext
-  ){
-    let request_id = object::new(ctx);
-    let request = CollectionRequest {
-      id: request_id,
-      user: user.user,
-      homeAddress: user.homeAddress,
-      created_at: clock::timestamp_ms(clock),
-    };
-    transfer::share_object(request);
-  }
-
+  
   //   add collection
   public entry fun add_collection(
     company: &mut Company,
