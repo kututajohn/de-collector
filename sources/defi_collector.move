@@ -26,7 +26,6 @@ module defi_collector::defi_collector {
     charges: u64,
     balance: Balance<SUI>,
     collections: Table<ID, Collection>,
-    requests: Table<ID, CollectionRequest>,
     company: address,
   }
 
@@ -63,13 +62,6 @@ module defi_collector::defi_collector {
     assignedUsers: vector<address>,
   }
 
-  struct CollectionRequest has key, store {
-    id: UID,
-    user: address,
-    homeAddress: String,
-    created_at: u64,
-  }
-
   //   functions
   // create new company
   public fun create_company(
@@ -89,7 +81,6 @@ module defi_collector::defi_collector {
       charges,
       balance: balance::zero<SUI>(),
       collections: table::new<ID, Collection>(ctx),
-      requests: table::new<ID, CollectionRequest>(ctx),
       company: tx_context::sender(ctx),
     };
     transfer::share_object(company);
