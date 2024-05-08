@@ -150,10 +150,6 @@ module defi_collector::defi_collector {
       district,
       weight,
     };
-
-    let charges = coin::take(&mut user.balance, company.charges, ctx);
-    transfer::public_transfer(charges, company.company);
-
     let payment = coin::take(&mut user.balance, company.charges, ctx);
     coin::put(&mut company.balance, payment);
 
