@@ -30,6 +30,11 @@ module defi_collector::defi_collector {
     company: address,
   }
 
+  struct CompanyCap has key {
+    id: UID,
+    for: ID
+  }
+
   struct Collection has key, store {
     id: UID,
     user: address,
@@ -68,16 +73,17 @@ module defi_collector::defi_collector {
 
   //   functions
   // create new company
-  public entry fun create_company(
+  public fun create_company(
     name: String,
     email: String,
     phone: String,
     charges: u64,
     ctx: &mut TxContext
-  ) {
-    let company_id = object::new(ctx);
+  ) : CompanyCap {
+    let id_ = object::new(ctx);
+    let inner_ = object::uid_to_inner(&id_);
     let company = Company {
-      id: company_id,
+      id: id_,
       name,
       email,
       phone,
@@ -88,6 +94,11 @@ module defi_collector::defi_collector {
       company: tx_context::sender(ctx),
     };
     transfer::share_object(company);
+
+    CompanyCap {
+      id: object::new(ctx),
+      for: inner_
+    }
   }
 
   // create new user
