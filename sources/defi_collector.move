@@ -102,22 +102,22 @@ module defi_collector::defi_collector {
   }
 
   // create new user
-  public entry fun create_user(
+  public fun create_user(
     name: String,
     email: String,
     homeAddress: String,
     ctx: &mut TxContext
-  ) {
+  ) : User {
     let user_id = object::new(ctx);
-    let user = User {
+    User {
       id: user_id,
       name,
       email,
       homeAddress,
       balance: balance::zero<SUI>(),
       user: tx_context::sender(ctx),
-    };
-    transfer::share_object(user);
+    }
+    
   }
 
   //  add truck
