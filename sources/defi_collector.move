@@ -8,7 +8,7 @@ module defi_collector::defi_collector {
   use sui::table::{Self, Table};
   use sui::object::{Self, ID, UID};
   use sui::balance::{Self, Balance};
-  use sui::tx_context::{Self, TxContext};
+  use sui::tx_context::{Self, TxContext, sender};
 
   //   errors
   const EInsuficcientBalance: u64 = 1;
@@ -38,6 +38,7 @@ module defi_collector::defi_collector {
   struct Collection has key, store {
     id: UID,
     truck: Truck,
+    owner: address,
     date: String,
     time: u64,
     district: String,
@@ -135,7 +136,7 @@ module defi_collector::defi_collector {
       assignedUsers: vector::empty<address>(),
     }
   }
-  
+
   //   add collection
   public entry fun add_collection(
     company: &mut Company,
@@ -146,14 +147,13 @@ module defi_collector::defi_collector {
     weight: u64,
     clock: &Clock,
     ctx: &mut TxContext
-  ){
-    assert!(tx_context::sender(ctx) == company.company, ENotCompany);
-    assert!(user.user == object::uid_to_address(&user.id), ENotCompanyUser);
+  ) {
     assert!(weight <= truck.capacity, EInsufficientCapacity);
     assert!(balance::value(&user.balance) >= company.charges, EInsuficcientBalance);
     let collection = Collection {
       id:  object::new(ctx),
       truck: truck,
+      owner: sender(ctx),
       date,
       time: clock::timestamp_ms(clock),
       district,
@@ -167,6 +167,22 @@ module defi_collector::defi_collector {
     coin::put(&mut company.balance, payment);
 
     table::add<ID, Collection>(&mut company.collections, object::uid_to_inner(&collection.id), collection);
+  }
+
+  public fun remove_collection(company: &mut Company, collection: ID, ctx: &mut TxContext) : Truck {
+    let collection = table::remove(&mut company.collections, collection);
+    let Collection {
+      id,
+      truck,
+      owner,
+      date: _,
+      time: _,
+      district: _,
+      weight: _
+    } = collection;
+    assert!(sender(ctx) == owner, ENotUser);
+    object::delete(id);
+    truck
   }
 
   // fund user account
