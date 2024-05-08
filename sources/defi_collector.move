@@ -37,9 +37,7 @@ module defi_collector::defi_collector {
 
   struct Collection has key, store {
     id: UID,
-    user: address,
-    userName: String,
-    truckId: ID,
+    truck: Truck,
     date: String,
     time: u64,
     district: String,
@@ -116,28 +114,26 @@ module defi_collector::defi_collector {
       homeAddress,
       balance: balance::zero<SUI>(),
       user: tx_context::sender(ctx),
-    }
-    
+    } 
   }
 
-  //  add truck
-  public entry fun add_truck(
+  // add truck
+  public fun new_truck(
     registration: String,
     driverName: String,
     capacity: u64,
     district: String,
     ctx: &mut TxContext
-  ) {
+  ) : Truck {
     let truck_id = object::new(ctx);
-    let truck = Truck {
+    Truck {
       id: truck_id,
       registration,
       driverName,
       capacity,
       district,
       assignedUsers: vector::empty<address>(),
-    };
-    transfer::share_object(truck);
+    }
   }
 
   // new collection request
@@ -160,7 +156,7 @@ module defi_collector::defi_collector {
   public entry fun add_collection(
     company: &mut Company,
     user: &mut User,
-    truck: &mut Truck,
+    truck: Truck,
     date: String,
     district: String,
     weight: u64,
@@ -169,33 +165,22 @@ module defi_collector::defi_collector {
   ){
     assert!(tx_context::sender(ctx) == company.company, ENotCompany);
     assert!(user.user == object::uid_to_address(&user.id), ENotCompanyUser);
-    let collection_id = object::new(ctx);
-    let truck_id = &truck.id;
+    assert!(weight <= truck.capacity, EInsufficientCapacity);
+    assert!(balance::value(&user.balance) >= company.charges, EInsuficcientBalance);
     let collection = Collection {
-      id: collection_id,
-      user: user.user,
-      userName: user.name,
-      truckId: object::uid_to_inner(truck_id),
+      id:  object::new(ctx),
+      truck: truck,
       date,
       time: clock::timestamp_ms(clock),
       district,
       weight,
     };
 
-    // deduct charges from user balance
-    assert!(balance::value(&user.balance) >= company.charges, EInsuficcientBalance);
-    assert!(weight <= truck.capacity, EInsufficientCapacity);
-
     let charges = coin::take(&mut user.balance, company.charges, ctx);
     transfer::public_transfer(charges, company.company);
 
     let payment = coin::take(&mut user.balance, company.charges, ctx);
-    // let copy_payment = coin::take(&mut user.balance, company.charges, ctx);
-
-    transfer::public_transfer(payment, company.company);
-    
-    // reduce truck capacity by weight
-    truck.capacity = truck.capacity - weight;
+    coin::put(&mut company.balance, payment);
 
     table::add<ID, Collection>(&mut company.collections, object::uid_to_inner(&collection.id), collection);
   }
