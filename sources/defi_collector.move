@@ -8,7 +8,7 @@ module defi_collector::defi_collector {
   use sui::table::{Self, Table};
   use sui::object::{Self, ID, UID};
   use sui::balance::{Self, Balance};
-  use sui::tx_context::{Self, TxContext};
+  use sui::tx_context::{Self, TxContext, sender};
 
   //   errors
   const EInsuficcientBalance: u64 = 1;
@@ -26,15 +26,18 @@ module defi_collector::defi_collector {
     charges: u64,
     balance: Balance<SUI>,
     collections: Table<ID, Collection>,
-    requests: Table<ID, CollectionRequest>,
     company: address,
+  }
+
+  struct CompanyCap has key {
+    id: UID,
+    for: ID
   }
 
   struct Collection has key, store {
     id: UID,
-    user: address,
-    userName: String,
-    truckId: ID,
+    truck: Truck,
+    owner: address,
     date: String,
     time: u64,
     district: String,
@@ -59,174 +62,156 @@ module defi_collector::defi_collector {
     assignedUsers: vector<address>,
   }
 
-  struct CollectionRequest has key, store {
-    id: UID,
-    user: address,
-    homeAddress: String,
-    created_at: u64,
-  }
-
   //   functions
   // create new company
-  public entry fun create_company(
+  public fun create_company(
     name: String,
     email: String,
     phone: String,
     charges: u64,
     ctx: &mut TxContext
-  ) {
-    let company_id = object::new(ctx);
+  ) : CompanyCap {
+    let id_ = object::new(ctx);
+    let inner_ = object::uid_to_inner(&id_);
     let company = Company {
-      id: company_id,
+      id: id_,
       name,
       email,
       phone,
       charges,
       balance: balance::zero<SUI>(),
       collections: table::new<ID, Collection>(ctx),
-      requests: table::new<ID, CollectionRequest>(ctx),
       company: tx_context::sender(ctx),
     };
     transfer::share_object(company);
+
+    CompanyCap {
+      id: object::new(ctx),
+      for: inner_
+    }
   }
 
   // create new user
-  public entry fun create_user(
+  public fun create_user(
     name: String,
     email: String,
     homeAddress: String,
     ctx: &mut TxContext
-  ) {
+  ) : User {
     let user_id = object::new(ctx);
-    let user = User {
+    User {
       id: user_id,
       name,
       email,
       homeAddress,
       balance: balance::zero<SUI>(),
       user: tx_context::sender(ctx),
-    };
-    transfer::share_object(user);
+    } 
   }
 
-  //  add truck
-  public entry fun add_truck(
+  // add truck
+  public fun new_truck(
     registration: String,
     driverName: String,
     capacity: u64,
     district: String,
     ctx: &mut TxContext
-  ) {
+  ) : Truck {
     let truck_id = object::new(ctx);
-    let truck = Truck {
+    Truck {
       id: truck_id,
       registration,
       driverName,
       capacity,
       district,
       assignedUsers: vector::empty<address>(),
-    };
-    transfer::share_object(truck);
-  }
-
-  // new collection request
-  public entry fun new_collection_request(
-    user: &User,
-    clock: &Clock,
-    ctx: &mut TxContext
-  ){
-    let request_id = object::new(ctx);
-    let request = CollectionRequest {
-      id: request_id,
-      user: user.user,
-      homeAddress: user.homeAddress,
-      created_at: clock::timestamp_ms(clock),
-    };
-    transfer::share_object(request);
+    }
   }
 
   //   add collection
   public entry fun add_collection(
     company: &mut Company,
     user: &mut User,
-    truck: &mut Truck,
+    truck: Truck,
     date: String,
     district: String,
     weight: u64,
     clock: &Clock,
     ctx: &mut TxContext
-  ){
-    assert!(tx_context::sender(ctx) == company.company, ENotCompany);
-    assert!(user.user == object::uid_to_address(&user.id), ENotCompanyUser);
-    let collection_id = object::new(ctx);
-    let truck_id = &truck.id;
+  ) {
+    assert!(weight <= truck.capacity, EInsufficientCapacity);
+    assert!(balance::value(&user.balance) >= company.charges, EInsuficcientBalance);
     let collection = Collection {
-      id: collection_id,
-      user: user.user,
-      userName: user.name,
-      truckId: object::uid_to_inner(truck_id),
+      id:  object::new(ctx),
+      truck: truck,
+      owner: sender(ctx),
       date,
       time: clock::timestamp_ms(clock),
       district,
       weight,
     };
-
-    // deduct charges from user balance
-    assert!(balance::value(&user.balance) >= company.charges, EInsuficcientBalance);
-    assert!(weight <= truck.capacity, EInsufficientCapacity);
-
-    let charges = coin::take(&mut user.balance, company.charges, ctx);
-    transfer::public_transfer(charges, company.company);
-
     let payment = coin::take(&mut user.balance, company.charges, ctx);
-    // let copy_payment = coin::take(&mut user.balance, company.charges, ctx);
-
-    transfer::public_transfer(payment, company.company);
-    
-    // reduce truck capacity by weight
-    truck.capacity = truck.capacity - weight;
+    coin::put(&mut company.balance, payment);
 
     table::add<ID, Collection>(&mut company.collections, object::uid_to_inner(&collection.id), collection);
   }
 
+  public fun remove_collection(company: &mut Company, collection: ID, ctx: &mut TxContext) : Truck {
+    let collection = table::remove(&mut company.collections, collection);
+    let Collection {
+      id,
+      truck,
+      owner,
+      date: _,
+      time: _,
+      district: _,
+      weight: _
+    } = collection;
+    assert!(sender(ctx) == owner, ENotUser);
+    object::delete(id);
+    truck
+  }
+
   // fund user account
-  public entry fun fund_user_account(
+  public entry fun deposit(
     user: &mut User,
     amount: Coin<SUI>,
-    ctx: &mut TxContext
   ) {
-    assert!(tx_context::sender(ctx) == user.user, ENotUser);
     let coin_amount = coin::into_balance(amount);
     balance::join(&mut user.balance, coin_amount);
   }
 
+  public fun withdraw(
+    user: &mut Company,
+    amount: u64,
+    ctx: &mut TxContext
+  ) : Coin<SUI> {
+    let payment = coin::take(&mut user.balance, amount, ctx);
+    payment
+  }
   // check user balance
   public fun user_check_balance(
-    user: &User,
-    ctx:  &mut TxContext
-  ): &Balance<SUI>  {
-    assert!(tx_context::sender(ctx) == user.user, ENotUser);
-    &user.balance
+    user: &User
+  ): u64  {
+    balance::value(&user.balance)
   }
 
   // company check balance
   public fun company_check_balance(
-    company: &Company,
-    ctx:  &mut TxContext
-  ): &Balance<SUI>  {
-    assert!(tx_context::sender(ctx) == company.company, ENotCompany);
-    &company.balance
+    company: &Company
+  ): u64  {
+    balance::value(&company.balance)
   }
 
   // withdraw company balance
-  public entry fun withdraw_company_balance(
+  public fun withdraw_company_balance(
+    cap: &CompanyCap,
     company: &mut Company,
     amount: u64,
     ctx: &mut TxContext
-  ) {
-    assert!(tx_context::sender(ctx) == company.company, ENotCompany);
-    assert!(balance::value(&company.balance) >= amount, EInsuficcientBalance);
+  ) : Coin<SUI> {
+    assert!(cap.for == object::id(company), ENotCompany);
     let payment = coin::take(&mut company.balance, amount, ctx);
-    transfer::public_transfer(payment, company.company);
+    payment
   }
 }
